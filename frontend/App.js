@@ -17,7 +17,7 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'https://drivelogic-app.onrender.com';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('mechanic'); // 'mechanic' | 'shops' | 'consulting'
