@@ -412,6 +412,21 @@ async def call_ai_mechanic(request: DiagnoseRequest) -> DiagnosticResult:
 # ---------------------------------------------------------------------------
 # API Endpoints
 # ---------------------------------------------------------------------------
+@app.get("/")
+def root_endpoint():
+    return {
+        "service": "DriveLogic AI Mechanic API",
+        "status": "online",
+        "message": "Backend API is running. The mobile frontend connects here for diagnostics, parts, and shops.",
+        "documentation": "/docs",
+        "endpoints": {
+            "health": "/api/health",
+            "diagnose": "/api/diagnose",
+            "shops": "/api/shops/nearby",
+            "consulting": "/api/consulting/book"
+        }
+    }
+
 @app.get("/api/health")
 def health_check():
     has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
