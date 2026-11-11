@@ -177,6 +177,85 @@ def rule_based_diagnose(request: DiagnoseRequest) -> DiagnosticResult:
     if request.image_base64:
         img_note = "Visual Inspection Attached: Image received and evaluated against vehicle diagnostic reference library."
 
+    # 0. Contextual follow-up check if conversation has history
+    if request.history and len(request.history) > 0:
+        history_text = " ".join([h.content for h in request.history]).lower()
+        
+        # Follow-up: Driving safety / distance
+        if any(k in text for k in ["can i drive", "safe to drive", "how far", "limp", "drive it", "tow"]):
+            if "overheat" in history_text or "steam" in history_text:
+                return DiagnosticResult(
+                    reply=f"For your {veh_desc or 'vehicle'}, do NOT continue driving while overheating. Even a few minutes of driving with high coolant temperatures or steam can warp aluminum cylinder heads, turning a simple $150 thermostat or hose leak into a $2,500+ head gasket job. We strongly advise pulling over safely and calling a flatbed tow.",
+                    probable_issues=[{"name": "Engine Overheating Safety Warning", "probability": "Critical", "details": "High thermal stress risks cylinder head warpage and engine seizure."}],
+                    urgency="critical",
+                    recommended_specialty="Cooling System & Radiators",
+                    estimated_cost_range="$100 - $150 (Tow fee) vs $2,500+ (Head gasket repair)",
+                    safe_to_drive=False,
+                    diy_friendly=False,
+                    questions_for_mechanic=["Did the engine overheat long enough to compromise cylinder head flatness?"],
+                    parts_sourcing=generate_parts_sourcing(request.vehicle, "Coolant Thermostat Radiator"),
+                    image_analysis=img_note
+                )
+            elif "grind" in history_text or "brake" in history_text:
+                return DiagnosticResult(
+                    reply=f"If your {veh_desc or 'vehicle'} has grinding brakes, you can limp 2 to 5 miles at low speed directly to a repair shop or your home garage, but maintain extra following distance and avoid highway speeds. The brake friction material is fully depleted and steel backing plates are scoring the rotor face.",
+                    probable_issues=[{"name": "Severe Brake Friction Depletion", "probability": "High", "details": "Extended driving will destroy rotors and risk caliper piston overextension."}],
+                    urgency="high",
+                    recommended_specialty="Brakes & Suspension",
+                    estimated_cost_range="$220 - $550 per axle",
+                    safe_to_drive=False,
+                    diy_friendly=True,
+                    questions_for_mechanic=["Can you measure remaining rotor thickness to verify if replacement is required?"],
+                    parts_sourcing=generate_parts_sourcing(request.vehicle, "Brake Pads and Rotors"),
+                    image_analysis=img_note
+                )
+            else:
+                return DiagnosticResult(
+                    reply=f"If your dashboard check engine light is solid (not flashing) and you experience no loss of steering, braking, or coolant temperature spikes, your {veh_desc or 'vehicle'} is generally safe for short local trips to reach a repair facility or parts store.",
+                    probable_issues=[{"name": "Standard Drivability Evaluation", "probability": "Medium", "details": "Non-critical emission or sensor fault."}],
+                    urgency="medium",
+                    recommended_specialty="Engine Diagnostics & Drivability",
+                    estimated_cost_range="$120 diagnostic fee",
+                    safe_to_drive=True,
+                    diy_friendly=True,
+                    questions_for_mechanic=["What active DTC trouble codes were recorded in freeze frame data?"],
+                    parts_sourcing=generate_parts_sourcing(request.vehicle, "Service Replacement Parts"),
+                    image_analysis=img_note
+                )
+
+        # Follow-up: Labor / Cost breakdown
+        elif any(k in text for k in ["labor", "how much", "cost", "quote", "fair price", "expensive", "rip off"]):
+            return DiagnosticResult(
+                reply=f"Independent repair shops currently charge between $110 to $175 per hour for labor, while dealerships charge $180 to $250+/hr. For this repair on your {veh_desc or 'vehicle'}, expected billable book time is typically 1.5 to 2.5 hours. Purchasing your own parts through RockAuto or FCP Euro (using the links above) saves you the standard 40% to 100% parts markup charged by most repair shops.",
+                probable_issues=[{"name": "Repair Estimate Labor vs Parts", "probability": "High", "details": "Standard Mitchell/AllData flat rate guide times apply."}],
+                urgency="low",
+                recommended_specialty="General Auto Repair & Inspection",
+                estimated_cost_range="$150 - $350 (Labor estimate)",
+                safe_to_drive=True,
+                diy_friendly=True,
+                questions_for_mechanic=[
+                    "What is your hourly labor rate and how many flag hours are billed for this job?",
+                    "Do you offer a labor warranty if I bring my own OEM parts from FCP Euro or RockAuto?"
+                ],
+                parts_sourcing=generate_parts_sourcing(request.vehicle, "OEM Replacement Parts"),
+                image_analysis=img_note
+            )
+
+        # Follow-up: Tools / DIY instructions
+        elif any(k in text for k in ["tool", "tools", "diy", "myself", "how do i", "steps", "difficulty"]):
+            return DiagnosticResult(
+                reply=f"To tackle this repair on your {veh_desc or 'vehicle'} yourself, you will generally need: a standard metric socket set with ratchet and extensions, a hydraulic floor jack and heavy-duty jack stands, a calibrated torque wrench, and safety glasses. Always support the vehicle securely on solid jack stands before working underneath—never rely solely on a hydraulic jack.",
+                probable_issues=[{"name": "DIY Tool & Equipment Requirements", "probability": "Medium", "details": "Standard garage hand tools and safety equipment required."}],
+                urgency="low",
+                recommended_specialty="DIY Auto Repair",
+                estimated_cost_range="$50 - $120 (Tools if not owned)",
+                safe_to_drive=True,
+                diy_friendly=True,
+                questions_for_mechanic=["What are the factory fastener torque specifications for this component?"],
+                parts_sourcing=generate_parts_sourcing(request.vehicle, "Replacement Parts and Hardware"),
+                image_analysis=img_note
+            )
+
     # 1. Brake issues
     if any(k in text for k in ["squeak", "grind", "brake", "pedal soft", "pedal spongy", "stopping"]):
         return DiagnosticResult(
@@ -359,11 +438,17 @@ async def call_ai_mechanic(request: DiagnoseRequest) -> DiagnosticResult:
             
             user_prompt = f"{veh_info}Symptoms: {', '.join(request.symptoms) if request.symptoms else 'None explicitly checked'}\nDriver description: {request.message}\nProvide diagnosis in JSON."
             
+            claude_messages = []
+            if request.history:
+                for h in request.history:
+                    claude_messages.append({"role": h.role, "content": h.content})
+            claude_messages.append({"role": "user", "content": user_prompt})
+
             response = await client.messages.create(
                 model="claude-3-5-sonnet-20241022",
                 max_tokens=1500,
                 system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_prompt}]
+                messages=claude_messages
             )
             content = response.content[0].text
             # Extract JSON block
@@ -389,13 +474,16 @@ async def call_ai_mechanic(request: DiagnoseRequest) -> DiagnosticResult:
             
             user_prompt = f"{veh_info}Symptoms: {', '.join(request.symptoms) if request.symptoms else 'None'}\nDriver description: {request.message}\nProvide diagnosis in JSON."
             
+            openai_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+            if request.history:
+                for h in request.history:
+                    openai_messages.append({"role": h.role, "content": h.content})
+            openai_messages.append({"role": "user", "content": user_prompt})
+
             response = await client.chat.completions.create(
                 model="gpt-4o-mini",
                 response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": user_prompt}
-                ]
+                messages=openai_messages
             )
             content = response.choices[0].message.content
             data = json.loads(content)
