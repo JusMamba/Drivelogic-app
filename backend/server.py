@@ -371,24 +371,183 @@ def rule_based_diagnose(request: DiagnoseRequest) -> DiagnosticResult:
             image_analysis="Visual Inspection Note: Transmission fluid check. Pull dipstick onto white paper towel: fresh fluid is translucent pink/red; dark brown or burnt smell indicates friction plate wear." if request.image_base64 else None
         )
 
-    # General / Default response
+    # 6. Air Conditioning & Heating (HVAC)
+    elif any(k in text for k in ["ac", "a/c", "air condition", "blowing hot", "warm air", "not blowing cold", "freon", "refrigerant", "compressor", "hiss", "heater", "blower"]):
+        return DiagnosticResult(
+            reply=f"Air conditioning blowing warm air accompanied by a hissing noise behind the dashboard indicates low refrigerant (R134a or R1234yf) caused by an active system leak. The hissing sound is the thermal expansion valve (TXV) starving for liquid refrigerant. If refrigerant pressure drops too low, the compressor clutch will cycle off or fail to engage to prevent catastrophic compressor lockup.",
+            probable_issues=[
+                {"name": "Refrigerant Leak (O-rings, Condenser, or Evaporator)", "probability": "High", "details": "Loss of pressurized refrigerant prevents thermal heat exchange."},
+                {"name": "A/C Compressor Clutch or Control Solenoid Failure", "probability": "Medium", "details": "Compressor unable to generate high-side pressure to circulate freon."},
+                {"name": "Stuck Blend Door Actuator", "probability": "Low", "details": "HVAC climate flap stuck routing hot heater core air into the cabin."}
+            ],
+            urgency="low",
+            recommended_specialty="HVAC / Air Conditioning",
+            estimated_cost_range="$180 - $350 (A/C Evac & Recharge with Dye) or $650+ (Compressor/Condenser)",
+            safe_to_drive=True,
+            diy_friendly=False,
+            questions_for_mechanic=[
+                "Did a nitrogen or electronic UV dye test identify the exact location of the refrigerant leak?",
+                "What were the static and operating high-side vs low-side gauge pressures?",
+                "Is the compressor clutch coil receiving 12V and properly pulling in?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "A/C Compressor Condenser Cabin Filter"),
+            image_analysis="Visual Inspection Note: A/C condenser inspection. Check through front grille for stone impact damage, bent cooling fins, or oily residue stains indicating a freon leak." if request.image_base64 else None
+        )
+
+    # 7. Suspension & Clunking Over Bumps
+    elif any(k in text for k in ["clunk", "bump", "rattle", "thump", "strut", "shock", "ball joint", "control arm", "sway bar", "bushing", "pothole"]):
+        return DiagnosticResult(
+            reply=f"A distinct clunking, rattling, or thumping sound when driving over road bumps or entering driveways on your {veh_desc or 'vehicle'} typically points to worn sway bar end links, deteriorated control arm bushings, or a blown strut mount. A loose ball joint is particularly dangerous because complete failure can cause the wheel to fold outward while driving.",
+            probable_issues=[
+                {"name": "Worn Sway Bar End Links", "probability": "High", "details": "Ball-and-socket joints on stabilizer links develop play, rattling over small bumps."},
+                {"name": "Lower Control Arm Bushing Tear", "probability": "Medium", "details": "Rubber elastomer separated from steel sleeve, allowing suspension arm deflection."},
+                {"name": "Worn Strut Mount / Leaking Shock Absorber", "probability": "Medium", "details": "Hydraulic oil leak or worn upper bearing causing binding and noise."}
+            ],
+            urgency="high" if "ball joint" in text or "loose" in text else "medium",
+            recommended_specialty="Brakes & Suspension",
+            estimated_cost_range="$140 - $280 (Sway bar links) or $450 - $900 (Struts & Control arms)",
+            safe_to_drive=False if "ball joint" in text else True,
+            diy_friendly=True,
+            questions_for_mechanic=[
+                "Did a pry-bar chassis inspection reveal play in the ball joints or tie rod ends?",
+                "Are the front shock absorbers or struts actively leaking hydraulic oil?",
+                "Will this suspension repair require a 4-wheel alignment afterwards?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "Sway Bar Links Struts Control Arm"),
+            image_analysis="Visual Inspection Note: Suspension check. Inspect rubber boots on ball joints and tie rods for tears, and check shock absorber bodies for wet oil coating." if request.image_base64 else None
+        )
+
+    # 8. Steering & Wheel Vibration at Speed
+    elif any(k in text for k in ["vibration", "vibrat", "shaking", "shake", "wobble", "highway", "60", "70", "pull", "pulling", "alignment", "steering wheel"]):
+        return DiagnosticResult(
+            reply=f"A steering wheel vibration or vehicle shaking that becomes noticeable at highway speeds (between 55 to 75 mph) is almost always caused by dynamic wheel imbalance or an out-of-round tire with radial belt separation. If the car also drifts or pulls toward one side of the road, the wheel alignment (toe and camber angles) is misaligned.",
+            probable_issues=[
+                {"name": "Wheel Imbalance / Lost Wheel Weights", "probability": "High", "details": "Tire and wheel assembly dynamic balance is off by 0.5+ ounces."},
+                {"name": "Radial Tire Belt Separation / Broken Belt", "probability": "Medium", "details": "Internal steel belt shifting creates an egg-shaped tire profile."},
+                {"name": "Wheel Alignment & Tie Rod Play", "probability": "Medium", "details": "Excessive front toe angle causing tire scrubbing and steering wander."}
+            ],
+            urgency="medium",
+            recommended_specialty="Tires & Alignment",
+            estimated_cost_range="$40 - $90 (Wheel balance) or $99 - $160 (4-Wheel alignment)",
+            safe_to_drive=True,
+            diy_friendly=False,
+            questions_for_mechanic=[
+                "Can you perform a Road Force dynamic balance to check for tire radial runout?",
+                "Did you inspect the inner tire tread for scalloping, cupping, or feathering?",
+                "Are the inner and outer tie rod ends tight with zero lateral play?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "Tires Tie Rod Wheel Hub Bearing"),
+            image_analysis="Visual Inspection Note: Tire tread inspection. Check for uneven wear across inner vs outer tire shoulders, and run hand along tread to feel for wave-like cupping." if request.image_base64 else None
+        )
+
+    # 9. Fluid Leaks, Oil Smells & Smoke
+    elif any(k in text for k in ["leak", "puddle", "drip", "burning smell", "oil smell", "oil leak", "smoke", "sweet smell", "gas smell", "fuel smell", "rotten egg", "sulfur"]):
+        return DiagnosticResult(
+            reply=f"Visible fluid puddling or burning odors in your {veh_desc or 'vehicle'} require immediate identification. If you smell burning oil through the vents, engine oil is likely dripping from a valve cover gasket directly onto the hot exhaust manifold. A sweet maple syrup odor indicates an ethylene glycol coolant leak, while a sulfur/rotten egg odor indicates an overly rich fuel mixture overheating the catalytic converter.",
+            probable_issues=[
+                {"name": "Valve Cover Gasket Oil Leak", "probability": "High", "details": "Hardened rubber perimeter gasket allowing oil to drip onto hot exhaust."},
+                {"name": "Cooling System Leak (Hose/Radiator)", "probability": "Medium", "details": "Pressurized coolant escaping, causing sweet burning aroma."},
+                {"name": "Oil Pan Gasket or Rear Main Seal", "probability": "Medium", "details": "Undercarriage oil seepage collecting on engine oil pan or bellhousing."}
+            ],
+            urgency="high" if "smoke" in text or "gas" in text else "medium",
+            recommended_specialty="Engine Diagnostics & Drivability",
+            estimated_cost_range="$180 - $420 (Valve cover gasket) or $120 leak inspection",
+            safe_to_drive=False if "gas smell" in text or "smoke" in text else True,
+            diy_friendly=True,
+            questions_for_mechanic=[
+                "Did you clean the engine and use UV dye to trace the highest source of the leak?",
+                "Is the oil leak dripping onto rubber belts or suspension bushings?",
+                "Is the engine oil level currently safe to operate?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "Valve Cover Gasket Oil Filter"),
+            image_analysis="Visual Inspection Note: Fluid color identification. Amber/black = engine oil; pink/green/orange = coolant; reddish = transmission/power steering; clear = A/C water condensation." if request.image_base64 else None
+        )
+
+    # 10. Belts, Pulleys & Whining / Squealing
+    elif any(k in text for k in ["whine", "whining", "squeal", "chirp", "screech", "belt", "pulley", "serpentine"]):
+        return DiagnosticResult(
+            reply=f"A loud high-pitched squealing or chirping noise from under the hood—especially on cold starts or when turning the steering wheel / turning on the A/C—indicates a loose or glazed serpentine accessory drive belt. A persistent mechanical whine that changes pitch with engine RPM points to a failing belt tensioner bearing, alternator bearing, or power steering pump cavitation.",
+            probable_issues=[
+                {"name": "Worn / Glazed Serpentine Drive Belt", "probability": "High", "details": "Belt ribs have hardened and are slipping across accessory drive pulleys."},
+                {"name": "Failing Idler Pulley or Tensioner Bearing", "probability": "Medium", "details": "Dry internal ball bearings vibrating under accessory belt tension."},
+                {"name": "Power Steering Pump Fluid Cavitation", "probability": "Low", "details": "Low fluid level or aerated hydraulic fluid creating hydraulic whine."}
+            ],
+            urgency="medium",
+            recommended_specialty="General Auto Repair & Inspection",
+            estimated_cost_range="$110 - $240 (Serpentine belt & tensioner replacement)",
+            safe_to_drive=True,
+            diy_friendly=True,
+            questions_for_mechanic=[
+                "Is the automatic belt tensioner indicator arrow within normal operating range?",
+                "Were the idler pulleys spun by hand with the belt removed to test for roughness?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "Serpentine Belt Tensioner Idler Pulley"),
+            image_analysis="Visual Inspection Note: Serpentine belt check. Look at the grooved underside for cross-rib microcracks (more than 3 cracks per inch means immediate replacement)." if request.image_base64 else None
+        )
+
+    # 11. Stalling, Hesitation & Fuel Economy
+    elif any(k in text for k in ["stall", "stalling", "hesitat", "lag", "loss of power", "sluggish", "gas mileage", "mpg", "surge", "choke"]):
+        return DiagnosticResult(
+            reply=f"Engine stumbling, hesitation under acceleration, or intermittent stalling when coming to a stop on your {veh_desc or 'vehicle'} points to fuel-air mixture delivery issues. The most common culprit is a dirty Mass Air Flow (MAF) sensor or carbon-caked electronic throttle body blade, which prevents accurate idle air metering.",
+            probable_issues=[
+                {"name": "Dirty Mass Air Flow (MAF) Sensor & Throttle Body", "probability": "High", "details": "Carbon buildup prevents smooth throttle blade movement and accurate air measurement."},
+                {"name": "Vacuum Leak (Cracked PCV Hose or Intake Boot)", "probability": "Medium", "details": "Unmetered atmospheric air enters intake plenum, causing lean hesitation."},
+                {"name": "Clogged Fuel Filter or Failing Fuel Pump", "probability": "Medium", "details": "Insufficient fuel rail pressure under load causes engine hesitation."}
+            ],
+            urgency="medium",
+            recommended_specialty="Engine Diagnostics & Drivability",
+            estimated_cost_range="$80 - $160 (Throttle/MAF cleaning) or $120 diagnostic fee",
+            safe_to_drive=True,
+            diy_friendly=True,
+            questions_for_mechanic=[
+                "What are the short-term and long-term fuel trim percentages at idle and 2500 RPM?",
+                "Did a smoke test reveal any intake manifold or PCV vacuum leaks?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "MAF Sensor Throttle Body Fuel Filter"),
+            image_analysis="Visual Inspection Note: Intake tract check. Inspect accordion rubber intake boot between air filter box and throttle body for split accordion folds." if request.image_base64 else None
+        )
+
+    # 12. Exhaust & Loud Engine Roar
+    elif any(k in text for k in ["exhaust", "loud", "muffler", "roar", "lawnmower", "buzzing exhaust", "catalytic", "converter"]):
+        return DiagnosticResult(
+            reply=f"A sudden loud, guttural roaring or buzzing exhaust note—sounding like a lawnmower or race car under acceleration—means exhaust gases are escaping upstream before reaching the muffler. In northern climates, the flexible stainless steel flex pipe often rusts and tears. In other cases, exhaust manifold studs crack under thermal expansion.",
+            probable_issues=[
+                {"name": "Ruptured Exhaust Flex Pipe or Gasket", "probability": "High", "details": "Engine movement has torn the stainless braided flex section."},
+                {"name": "Rusted Muffler or Flange Separation", "probability": "Medium", "details": "Corrosion has perforated the muffler casing or connecting exhaust pipe."},
+                {"name": "Cracked Exhaust Manifold", "probability": "Low", "details": "Cast iron or tubular manifold cracked, leaking toxic fumes near engine."}
+            ],
+            urgency="high" if "fumes" in text else "medium",
+            recommended_specialty="Exhaust & Emissions",
+            estimated_cost_range="$150 - $350 (Flex pipe weld/repair) or $400 - $800 (Muffler assembly)",
+            safe_to_drive=True,
+            diy_friendly=False,
+            questions_for_mechanic=[
+                "Can a replacement flex pipe be welded in, or does the entire catalytic converter assembly need replacement?",
+                "Are any exhaust gases penetrating the vehicle cabin floorpan?"
+            ],
+            parts_sourcing=generate_parts_sourcing(request.vehicle, "Muffler Exhaust Pipe Catalytic Converter"),
+            image_analysis="Visual Inspection Note: Exhaust undercarriage inspection. Look for dark black carbon soot spray around exhaust pipe joints or torn braided flex mesh." if request.image_base64 else None
+        )
+
+    # General / Default response (Tailored to exact user query)
     return DiagnosticResult(
-        reply=f"Thank you for contacting DriveLogic AI Mechanic. Based on your description for {veh_desc or 'your vehicle'}, here is our preliminary assessment. To provide a more precise diagnosis, tell me: when does this symptom happen (e.g. accelerating, braking, idling, cold morning), and are there any dashboard warning lights illuminated?",
+        reply=f"DriveLogic AI Mechanic evaluated your report for your {veh_desc or 'vehicle'}: \"{request.message}\". This symptom can stem from interacting mechanical, electrical, or sensor subsystems. To narrow this down accurately: does this happen continuously or intermittently, and does the symptom worsen with vehicle speed or engine RPM?",
         probable_issues=[
-            {"name": "Mechanical Wear or Sensor Calibration", "probability": "Medium", "details": "Preliminary symptom matching vehicle mechanical systems."},
-            {"name": "Electrical Connection or Battery Voltage", "probability": "Low", "details": "Fluctuations in 12V voltage can cause intermittent sensor warnings."}
+            {"name": f"Subsystem Inspection: {request.message[:40]}", "probability": "High", "details": f"Targeted technical inspection of components related to {request.message}."},
+            {"name": "Sensor Data Out-of-Range or Electrical Signal Glitch", "probability": "Medium", "details": "12V electrical fluctuation or sensor calibration drift causing intermittent faults."},
+            {"name": "Component Wear Matching Mileage", "probability": "Medium", "details": f"Normal wear timeline for a {request.vehicle.year if request.vehicle else ''} vehicle with {request.vehicle.mileage if request.vehicle else ''} miles."}
         ],
         urgency="medium",
         recommended_specialty="General Auto Repair & Inspection",
-        estimated_cost_range="$100 - $250 diagnostic inspection",
+        estimated_cost_range="$100 - $220 diagnostic inspection",
         safe_to_drive=True,
         diy_friendly=False,
         questions_for_mechanic=[
-            "Can you perform a comprehensive multi-point diagnostic inspection?",
-            "What OBD-II Diagnostic Trouble Codes (DTCs) are currently stored or pending?",
+            f"Can you perform a specialized diagnostic road test replicating: '{request.message[:40]}'?",
+            "What OBD-II Diagnostic Trouble Codes (DTCs) are currently stored in freeze frame?",
             "Can you provide a prioritized written estimate before beginning any work?"
         ],
-        parts_sourcing=generate_parts_sourcing(request.vehicle, "Maintenance Filters Spark Plugs"),
+        parts_sourcing=generate_parts_sourcing(request.vehicle, "OEM Replacement Parts Maintenance"),
         image_analysis=img_note
     )
 

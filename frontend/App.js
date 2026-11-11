@@ -61,6 +61,7 @@ export default function App() {
   const [bookingStatus, setBookingStatus] = useState(null);
 
   const scrollViewRef = useRef();
+  const inputRef = useRef(null);
 
   const quickSymptoms = [
     { label: 'Brake Grinding', key: 'brake_grind' },
@@ -153,6 +154,11 @@ export default function App() {
 
     // 2. Clear input fields immediately
     setSymptomText('');
+    if (inputRef.current) {
+      if (typeof inputRef.current.clear === 'function') inputRef.current.clear();
+      if (inputRef.current.value !== undefined) inputRef.current.value = '';
+      if (typeof inputRef.current.setNativeProps === 'function') inputRef.current.setNativeProps({ text: '' });
+    }
     setAttachedPhoto(null);
     setSelectedSymptoms([]);
     setLoadingDiagnosis(true);
@@ -213,6 +219,11 @@ export default function App() {
   const handleResetChat = () => {
     setMessages([]);
     setSymptomText('');
+    if (inputRef.current) {
+      if (typeof inputRef.current.clear === 'function') inputRef.current.clear();
+      if (inputRef.current.value !== undefined) inputRef.current.value = '';
+      if (typeof inputRef.current.setNativeProps === 'function') inputRef.current.setNativeProps({ text: '' });
+    }
     setAttachedPhoto(null);
     setSelectedSymptoms([]);
   };
@@ -688,6 +699,7 @@ export default function App() {
 
               <View style={styles.inputRow}>
                 <TextInput
+                  ref={inputRef}
                   style={styles.textInput}
                   placeholder={
                     messages.length > 0
